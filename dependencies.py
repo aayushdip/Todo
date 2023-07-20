@@ -1,11 +1,29 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status
+from sqlalchemy.orm import Session
 from models import User
-from schemas import UserInDB
 from typing import Annotated
 from database import SessionLocal
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2AuthorizationCodeBearer
+from hashing_password import verify_password
+from datetime import datetime, timedelta
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from jose import JWTError, jwt
+from schemas import TokenData
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+class Settings(BaseSettings):
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    SQLALCHEMY_DATABASE_URL:str
+
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+
+settings = Settings()
+
+
+
+oauth2_scheme = OAuth2AuthorizationCodeBearer(authorizationUrl="YOUR_AUTH_URL",tokenUrl="token")
 
 # Dependency
 def get_db():
@@ -15,27 +33,49 @@ def get_db():
     finally:
         db.close()
 
-def get_user(db, username: str):
-    if username in db:
-        user_dict = db[username]
-        return UserInDB(**user_dict)
+def get_user( db: Session, username:str):
+    user_info = db.query(User).filter(User.username == username).first()
 
+    if user_info:
+        return user_info
 
-def fake_decode_token(token):
-    # This doesn't provide any security at all
-    # Check the next version
-    user = get_user(fake_users_db, token)
+def authenticate_user(db:Session, username : str, password: str):
+    user = get_user(db, username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
     return user
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
-    user = fake_decode_token(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],db: Session =Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(db, username=token_data.username)
+    if user is None:
+        raise credentials_exception
     return user
 
 
