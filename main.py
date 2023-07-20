@@ -18,13 +18,13 @@ app = FastAPI()
 @app.post("/users", response_model=UserRead)
 def create_user(user: UserCreate,  db: Session = Depends(get_db)):
     try:
-        db_user = User(email=user.email, hashed_password=hash_password(user.password))
-        print(db_user)
+        db_user = User(fullname=user.fullname,email=user.email, hashed_password=hash_password(user.password))
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
         return db_user
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
 
 
@@ -36,6 +36,7 @@ def read_user(user_id: int,db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="User not found")
         return db_user
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
 
 
@@ -53,6 +54,7 @@ def create_todo(todo: TodoCreate,db: Session = Depends(get_db)):
         db.refresh(db_todo)
         return db_todo
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
 
 
@@ -64,6 +66,7 @@ def read_todo(todo_id: int,db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Todo not found")
         return db_todo
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
 
 
@@ -79,6 +82,7 @@ def update_todo(todo_id: int, todo: TodoUpdate,db: Session = Depends(get_db)):
         db.refresh(db_todo)
         return db_todo
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
 
 
@@ -92,4 +96,5 @@ def delete_todo(todo_id: int,db: Session = Depends(get_db)):
         db.commit()
         return {"message": "Todo deleted"}
     except SQLAlchemyError as e:
+        print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
