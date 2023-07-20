@@ -8,7 +8,7 @@ from models import User, Todo
 from schemas import  UserCreate, TodoCreate, TodoUpdate, UserRead, TodoRead, Token
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
-from dependencies import get_db,settings,create_access_token,authenticate_user
+from dependencies import get_db,settings,create_access_token,authenticate_user,get_current_user
 from datetime import timedelta
 
 
@@ -34,10 +34,12 @@ def create_user(user: UserCreate,  db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Database error")
 
 
-@app.get("/users/{user_id}", response_model=UserRead)
-def read_user(user_id: int,db: Session = Depends(get_db)):
+@app.get("/users/me", response_model=UserRead)
+def read_user(
+    user : User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
     try:
-        db_user = db.query(User).get(user_id)
+        db_user = db.query(User).get(user.id)
         if db_user is None:
             raise HTTPException(status_code=404, detail="User not found")
         return db_user
@@ -47,14 +49,18 @@ def read_user(user_id: int,db: Session = Depends(get_db)):
 
 
 @app.post("/todos", response_model=TodoRead)
-def create_todo(todo: TodoCreate,db: Session = Depends(get_db)):
+def create_todo(
+    todo: TodoCreate,
+    user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
     try:
         db_todo = Todo(
             title=todo.title,
             description=todo.description,
-            owner_id=todo.owner_id
+            owner_id=user.id 
         )
-        
+
         db.add(db_todo)
         db.commit()
         db.refresh(db_todo)
@@ -64,12 +70,19 @@ def create_todo(todo: TodoCreate,db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Database error")
 
 
+
 @app.get("/todos/{todo_id}", response_model=TodoRead)
-def read_todo(todo_id: int,db: Session = Depends(get_db)):
+def read_todo(
+    todo_id: int,
+    user : User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
     try:
         db_todo = db.query(Todo).get(todo_id)
         if db_todo is None:
             raise HTTPException(status_code=404, detail="Todo not found")
+        if db_todo.owner_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to delete this todo")
+
         return db_todo
     except SQLAlchemyError as e:
         print("Error caught:", e)
@@ -77,11 +90,17 @@ def read_todo(todo_id: int,db: Session = Depends(get_db)):
 
 
 @app.put("/todos/{todo_id}", response_model=TodoRead)
-def update_todo(todo_id: int, todo: TodoUpdate,db: Session = Depends(get_db)):
+def update_todo(
+    todo_id: int, 
+    todo: TodoUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
     try:
         db_todo = db.query(Todo).get(todo_id)
         if db_todo is None:
             raise HTTPException(status_code=404, detail="Todo not found")
+        if db_todo.owner_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to delete this todo")
         db_todo.title = todo.title
         db_todo.description = todo.description
         db.commit()
@@ -93,23 +112,32 @@ def update_todo(todo_id: int, todo: TodoUpdate,db: Session = Depends(get_db)):
 
 
 @app.delete("/todos/{todo_id}")
-def delete_todo(todo_id: int,db: Session = Depends(get_db)):
+def delete_todo(todo_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         db_todo = db.query(Todo).get(todo_id)
         if db_todo is None:
             raise HTTPException(status_code=404, detail="Todo not found")
+
+        if db_todo.owner_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to delete this todo")
+
         db.delete(db_todo)
         db.commit()
         return {"message": "Todo deleted"}
     except SQLAlchemyError as e:
         print("Error caught:", e)
         raise HTTPException(status_code=500, detail="Database error")
-    
+
+
+
+
+
 @app.post("/token", response_model=Token)
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db : Session = Depends(get_db)
 ):
+
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(

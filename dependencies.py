@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from models import User
 from typing import Annotated
 from database import SessionLocal
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2AuthorizationCodeBearer
 from hashing_password import verify_password
 from datetime import datetime, timedelta
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,7 +23,7 @@ settings = Settings()
 
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2AuthorizationCodeBearer(authorizationUrl="YOUR_AUTH_URL",tokenUrl="token")
 
 # Dependency
 def get_db():
