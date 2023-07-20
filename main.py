@@ -12,11 +12,14 @@ from dependencies import get_db, get_current_user, get_current_active_user, get_
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-
+from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException
 
 @app.post("/users", response_model=UserRead)
 def create_user(user: UserCreate,  db: Session = Depends(get_db)):
+    already_existing_user = db.query(User).filter(User.email == user.email). first()
+    if already_existing_user:
+        raise HTTPException(status_code=400, detail="User already exist in tha database")
     try:
         db_user = User(fullname=user.fullname,email=user.email, hashed_password=hash_password(user.password))
         db.add(db_user)
