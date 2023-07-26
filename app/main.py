@@ -1,25 +1,28 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from database import engine
-import models
-from hashing_password import hash_password
-from models import User, Todo
-from schemas import UserCreate, TodoCreate, TodoUpdate, UserRead, TodoRead, Token
+from app.database import engine
+import app.models as models
+from app.hashing_password import hash_password
+from app.models.user import User
+from app.models.todo import Todo
+from app.schemas.user_schema import UserCreate, UserRead
+from app.schemas.todo_schema import TodoCreate, TodoUpdate, TodoRead
+from app.schemas.token_schema import Token
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
-from dependencies import (
+from app.dependencies import (
     get_db,
-    settings,
     create_access_token,
     authenticate_user,
-    get_current_user,
     has_access,
 )
 from datetime import timedelta
+from app.settings import setting_object
 
 
-models.Base.metadata.create_all(bind=engine)
+models.user.Base.metadata.create_all(bind=engine)
+models.todo.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 from sqlalchemy.exc import SQLAlchemyError
@@ -148,7 +151,7 @@ def delete_todo(
         raise HTTPException(status_code=500, detail="Database error")
 
 
-@app.post("/token", response_model=Token)
+@app.post("/login", response_model=Token)
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Session = Depends(get_db),
@@ -160,7 +163,7 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=setting_object.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
