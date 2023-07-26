@@ -4,7 +4,7 @@ from app.schemas.token_schema import Token
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 from app.dependencies import get_db
-from crud import login
+from app.routers.crud import login
 
 router = APIRouter()
 
