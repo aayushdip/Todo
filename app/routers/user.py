@@ -6,7 +6,7 @@ from app.dependencies import (
     get_db,
     has_access,
 )
-from crud import (
+from .crud import (
     user_create_post,
     user_read_get,
 )
